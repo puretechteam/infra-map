@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infra Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <span class="sidebar-brand">Infra Map</span>
+            <button id="sidebar-toggle">&equiv;</button>
+        </div>
+        <div id="sidebar-stats">
+            <h3>Statistics</h3>
+            <div class="stat-item">
+                <span class="stat-label">Total Centers</span>
+                <span class="stat-value" id="stat-total">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Total Capacity</span>
+                <span class="stat-value" id="stat-capacity">0 MW</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Flock Cameras</span>
+                <span class="stat-value stat-accent" id="stat-cameras">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Providers</span>
+                <span class="stat-value" id="stat-providers">0</span>
+            </div>
+        </div>
+        <div id="sidebar-legend">
+            <h3>Providers</h3>
+            <div id="legend-items"></div>
+        </div>
+        <div id="stale-indicator" class="hidden">
+            <span class="stale-icon">&#9888;</span> Data may be stale
+        </div>
+    </div>
+    <div id="main-content">
+        <div id="header">
+            <button id="mobile-menu-btn">&#9776;</button>
+            <button id="reset-view-btn" title="Reset View">Reset View</button>
+            <div id="search-bar">
+                <input type="text" id="search-input" placeholder="Search by name or city..." />
+                <button id="search-btn">Search</button>
+            </div>
+            <div id="mode-toggle">
+                <button class="mode-btn active" data-mode="datacenters">Data Centers</button>
+                <button class="mode-btn" data-mode="flockcameras">Flock Cameras</button>
+            </div>
+            <div id="filters">
+                <select id="provider-filter">
+                    <option value="">All Providers</option>
+                </select>
+                <select id="region-filter">
+                    <option value="">All Regions</option>
+                </select>
+                <button id="reset-filters">Reset</button>
+                <button id="export-btn">Export JSON</button>
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+    <div id="detail-panel" class="hidden">
+        <div id="detail-header">
+            <h2 id="detail-title"></h2>
+            <button id="detail-close">&times;</button>
+        </div>
+        <div id="detail-body"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/js/map.js"></script>
+    <script src="/static/js/filters.js"></script>
+</body>
+</html>

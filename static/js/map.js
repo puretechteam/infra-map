@@ -301,7 +301,11 @@ function showDetailPanel(dc) {
         html += '</div>';
     }
 
-    html += '<div class="detail-row"><span class="detail-label">Launch Year</span><span class="detail-value">' + dc.launch_year + '</span></div>';
+    if (isFlockCamera(dc)) {
+        html += '<div class="detail-row"><span class="detail-label">Launch Year</span><span class="detail-value">' + (dc.launch_year !== undefined ? dc.launch_year : 'N/A') + '</span></div>';
+    } else {
+        html += '<div class="detail-row"><span class="detail-label">Launch Year</span><span class="detail-value">' + (dc.launch_year !== undefined ? dc.launch_year : 'N/A') + '</span></div>';
+    }
     html += '<div class="detail-row"><span class="detail-label">Services</span><span class="detail-value"><div class="services-list">';
     for (var i = 0; i < dc.services.length; i++) {
         var tagClass = dc.services[i] === 'camera' ? 'service-tag camera-tag' : 'service-tag';

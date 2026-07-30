@@ -159,31 +159,37 @@ function sortedUnique(arr) {
     return arr.filter(function(v, i, a) { return a.indexOf(v) === i; }).sort();
 }
 
+function filterEntries(entries, filters) {
+    var filtered = entries;
+
+    if (filters.provider) {
+        filtered = filtered.filter(function(dc) {
+            return dc.provider === filters.provider;
+        });
+    }
+
+    if (filters.region) {
+        filtered = filtered.filter(function(dc) {
+            return dc.region === filters.region;
+        });
+    }
+
+    if (filters.search) {
+        filtered = filtered.filter(function(dc) {
+            return dc.name.toLowerCase().indexOf(filters.search) !== -1 ||
+                   dc.city.toLowerCase().indexOf(filters.search) !== -1;
+        });
+    }
+
+    return filtered;
+}
+
 function applyFilters() {
     currentFilters.provider = document.getElementById('provider-filter').value;
     currentFilters.region = document.getElementById('region-filter').value;
     currentFilters.search = document.getElementById('search-input').value.toLowerCase().trim();
 
-    var filtered = allData;
-
-    if (currentFilters.provider) {
-        filtered = filtered.filter(function(dc) {
-            return dc.provider === currentFilters.provider;
-        });
-    }
-
-    if (currentFilters.region) {
-        filtered = filtered.filter(function(dc) {
-            return dc.region === currentFilters.region;
-        });
-    }
-
-    if (currentFilters.search) {
-        filtered = filtered.filter(function(dc) {
-            return dc.name.toLowerCase().indexOf(currentFilters.search) !== -1 ||
-                   dc.city.toLowerCase().indexOf(currentFilters.search) !== -1;
-        });
-    }
+    var filtered = filterEntries(allData, currentFilters);
 
     addMarkers(filtered);
 }
@@ -199,26 +205,7 @@ function resetFilters() {
 }
 
 function exportFilteredData() {
-    var filtered = allData;
-
-    if (currentFilters.provider) {
-        filtered = filtered.filter(function(dc) {
-            return dc.provider === currentFilters.provider;
-        });
-    }
-
-    if (currentFilters.region) {
-        filtered = filtered.filter(function(dc) {
-            return dc.region === currentFilters.region;
-        });
-    }
-
-    if (currentFilters.search) {
-        filtered = filtered.filter(function(dc) {
-            return dc.name.toLowerCase().indexOf(currentFilters.search) !== -1 ||
-                   dc.city.toLowerCase().indexOf(currentFilters.search) !== -1;
-        });
-    }
+    var filtered = filterEntries(allData, currentFilters);
 
     var blob = new Blob([JSON.stringify(filtered, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);

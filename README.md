@@ -1,5 +1,9 @@
 # Infra Map
 
+[![CI](https://github.com/puretechteam/infra-map/actions/workflows/ci.yml/badge.svg)](https://github.com/puretechteam/infra-map/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-0.1.0-informational)](https://github.com/puretechteam/infra-map/releases)
+
 A web-based interactive map visualization of data centers and infrastructure locations worldwide. Built with Flask and Leaflet.js, Infra Map provides real-time data fetching with offline fallback support.
 
 ## Features
@@ -19,39 +23,59 @@ A web-based interactive map visualization of data centers and infrastructure loc
 
 ## Setup
 
+> **Note:** The `Makefile` is the preferred cross-platform build tool. It works on Linux, macOS, and Windows (with WSL or Git Bash). Use `make install`, `make run`, `make build`, etc. The `.bat` scripts are kept for reference on native Windows without WSL or Git Bash.
+
 ### Development Server
 
 1. Install dependencies:
    ```
-   pip install -r requirements.txt
+   make install
    ```
 
 2. Run the Flask development server:
    ```
-   python app.py
+   make run
    ```
 
 3. Open http://localhost:5000 in your browser.
 
+### Development Dependencies
+
+For development and testing, install:
+```
+make install-dev
+```
+
 ### PyInstaller Build
 
-1. Ensure dependencies are installed:
-   ```
-   pip install -r requirements.txt
-   ```
+1. Ensure dependencies are installed (see above).
 
-2. Run the build script:
+2. Run the build:
    ```
-   build.bat
+   make build
    ```
 
    The output executable will be placed in the `dist/` directory with the version number embedded in the filename (e.g., `infra-map-0.1.0.exe`).
 
 ## Data Sources
 
-- Bundled data: `data/data_centers.json` (796+ entries including 660 Flock cameras)
+- Bundled data: `data/data_centers.json` (141,736 entries total; see Data Processing below)
 - External data: Fetched at runtime via `/api/fetch-external` proxy endpoint
 - Cached data: Stored in `cache/` directory with 1-hour TTL
+
+### Data Processing
+
+The raw data file `data/data_centers.json` contains a mix of data center entries and OpenStreetMap ALPR surveillance camera nodes with different schemas. Before use, the data must be preprocessed to filter out entries that do not conform to the expected data center schema.
+
+Run the preprocessing script:
+
+```
+python scripts/preprocess_data.py
+```
+
+This reads `data/data_centers.json`, removes entries missing required fields (`name`, `provider`, `latitude`, `longitude`), and writes the cleaned data to `data/data_centers_clean.json`. A summary of removed and remaining entries is printed to the console.
+
+The preprocessing step is necessary because approximately 31% of the raw dataset consists of OSM ALPR camera nodes with a different schema (`type: "node"`, `id`, `lat`, `lon`, `tags`) that lack the data center fields required by the application.
 
 ### Providers Included
 
@@ -66,6 +90,14 @@ AWS, Alibaba Cloud, Azure, Cloudflare, Akamai, CoreWeave, DigitalOcean, Equinix,
 - Reduced header padding, filter dropdown font sizes, search input width, and mode toggle button sizes for a more compact UI
 - Expanded Flock camera dataset from 607 to 660 entries with realistic global locations
 
+## Roadmap
+
+- Add real-time alerting for infrastructure anomalies
+- Support for custom map layers and annotations
+- Integration with monitoring tools (Prometheus, Grafana)
+- Historical capacity planning charts
+- Multi-region cost comparison view
+
 ## Project Structure
 
 ```
@@ -73,12 +105,16 @@ infra-map/
 ├── app.py                  # Flask backend
 ├── build.bat               # PyInstaller build script
 ├── dependencies.bat        # Dependency installer
-├── requirements.txt        # Python dependencies
+├── requirements.txt        # Runtime dependencies
 ├── VERSION                 # Version number
+├── .env.example            # Environment variable template
 ├── .gitignore              # Git ignore rules
 ├── README.md               # This file
+├── scripts/
+│   └── preprocess_data.py  # Data preprocessing script
 ├── data/
-│   └── data_centers.json   # Bundled data center data
+│   ├── data_centers.json        # Raw bundled data (mixed schema)
+│   └── data_centers_clean.json  # Cleaned data center data
 ├── cache/                  # Runtime data cache
 ├── static/
 │   ├── index.html          # Main HTML page
@@ -95,6 +131,14 @@ infra-map/
 
 No API keys are hardcoded. External data fetching uses environment variables or runtime configuration. Configuration files are excluded from version control via `.gitignore`.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.
+
+## Security
+
+Please report security vulnerabilities to the project maintainers. See [SECURITY.md](SECURITY.md) for details.
+
 ## License
 
-Internal use only.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

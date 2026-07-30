@@ -12,7 +12,7 @@ set FAIL=0
 
 echo [Step 1] Checking Python on PATH...
 set STEP=1
-python --version >nul 2>&1
+python --version
 if %ERRORLEVEL% EQU 0 (
     echo   [OK] Python is available on PATH
     set /a PASS+=1
@@ -24,7 +24,7 @@ if %ERRORLEVEL% EQU 0 (
 echo.
 echo [Step 2] Checking pip availability...
 set STEP=2
-python -m pip --version >nul 2>&1
+python -m pip --version
 if %ERRORLEVEL% EQU 0 (
     echo   [OK] pip is available
     set /a PASS+=1
@@ -48,7 +48,7 @@ if %ERRORLEVEL% EQU 0 (
 echo.
 echo [Step 4] Checking PyInstaller...
 set STEP=4
-python -m PyInstaller --version >nul 2>&1
+python -m PyInstaller --version
 if %ERRORLEVEL% EQU 0 (
     echo   [OK] PyInstaller is installed
     set /a PASS+=1

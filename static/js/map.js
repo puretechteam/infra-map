@@ -4,20 +4,12 @@ var allData = [];
 var providerColors = {};
 var colorIndex = 0;
 var colorPalette = [
-    '#e94560', '#0f3460', '#16213e', '#533483', '#e94560',
-    '#00b4d8', '#ff6b35', '#06d6a0', '#118ab2', '#ef476f',
-    '#ffd166', '#073b4c', '#8338ec', '#3a86ff', '#fb5607',
-    '#ff006e', '#8ac926', '#1982c4', '#6a4c93', '#f72585',
-    '#4cc9f0', '#7209b7', '#3a0ca3', '#4361ee', '#4895ef',
-    '#4cc9f0', '#f72585', '#b5179e', '#7209b7', '#560bad',
-    '#480ca8', '#3f37c9', '#4361ee', '#4895ef', '#4cc9f0',
-    '#06d6a0', '#118ab2', '#073b4c', '#ffd166', '#ef476f',
-    '#ff6b35', '#00b4d8', '#533483', '#16213e', '#0f3460',
-    '#e94560', '#8338ec', '#3a86ff', '#fb5607', '#ff006e',
+    '#e94560', '#0f3460', '#16213e', '#533483', '#00b4d8',
+    '#ff6b35', '#06d6a0', '#118ab2', '#ef476f', '#ffd166',
+    '#073b4c', '#8338ec', '#3a86ff', '#fb5607', '#ff006e',
     '#8ac926', '#1982c4', '#6a4c93', '#f72585', '#4cc9f0',
-    '#7209b7', '#3a0ca3', '#4361ee', '#4895ef', '#4cc9f0',
-    '#06d6a0', '#118ab2', '#073b4c', '#ffd166', '#ef476f',
-    '#ff6b35', '#00b4d8', '#533483', '#16213e', '#0f3460'
+    '#7209b7', '#3a0ca3', '#4361ee', '#4895ef', '#b5179e',
+    '#560bad', '#480ca8', '#3f37c9'
 ];
 var markerLayer = null;
 var cameraConesLayer = null;
@@ -114,6 +106,7 @@ function hideStaleIndicator() {
 
 function isFlockCamera(dc) {
     if (dc.provider === 'Flock Security') return true;
+    if (dc.services && dc.services.indexOf('camera') !== -1) return true;
     return false;
 }
 
@@ -301,11 +294,7 @@ function showDetailPanel(dc) {
         html += '</div>';
     }
 
-    if (isFlockCamera(dc)) {
-        html += '<div class="detail-row"><span class="detail-label">Launch Year</span><span class="detail-value">' + (dc.launch_year !== undefined ? dc.launch_year : 'N/A') + '</span></div>';
-    } else {
-        html += '<div class="detail-row"><span class="detail-label">Launch Year</span><span class="detail-value">' + (dc.launch_year !== undefined ? dc.launch_year : 'N/A') + '</span></div>';
-    }
+    html += '<div class="detail-row"><span class="detail-label">Launch Year</span><span class="detail-value">' + (dc.launch_year !== undefined ? dc.launch_year : 'N/A') + '</span></div>';
     html += '<div class="detail-row"><span class="detail-label">Services</span><span class="detail-value"><div class="services-list">';
     for (var i = 0; i < dc.services.length; i++) {
         var tagClass = dc.services[i] === 'camera' ? 'service-tag camera-tag' : 'service-tag';

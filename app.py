@@ -145,7 +145,7 @@ def load_and_validate_data() -> tuple[list[dict] | None, str | None]:
         return _validated_data_cache, None
 
     try:
-        with open(data_path, "r", encoding="utf-8") as f:
+        with open(data_path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         logger.error("Failed to parse data file: %s", e)
@@ -243,7 +243,7 @@ def get_cached_or_fetch(url: str, cache_filename: str) -> tuple[list[dict] | Non
 
     if os.path.exists(cache_path):
         try:
-            with open(cache_path, "r", encoding="utf-8") as f:
+            with open(cache_path, encoding="utf-8") as f:
                 cached = json.load(f)
             fetched_at = cached.get("_fetched_at", 0)
             if now - fetched_at < CACHE_TTL_SECONDS:
@@ -268,7 +268,7 @@ def get_cached_or_fetch(url: str, cache_filename: str) -> tuple[list[dict] | Non
     except Exception as e:
         if os.path.exists(cache_path):
             try:
-                with open(cache_path, "r", encoding="utf-8") as f:
+                with open(cache_path, encoding="utf-8") as f:
                     cached = json.load(f)
                 return cached.get("_data"), "data may be stale"
             except (OSError, json.JSONDecodeError):
@@ -415,7 +415,7 @@ def get_cached_fallback() -> list[dict] | None:
     data_path = os.path.join(get_data_path(), "data_centers.json")
     if os.path.exists(data_path):
         try:
-            with open(data_path, "r", encoding="utf-8") as f:
+            with open(data_path, encoding="utf-8") as f:
                 data = json.load(f)
             error = validate_data(data)
             if error:

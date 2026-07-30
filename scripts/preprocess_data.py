@@ -14,7 +14,7 @@ def main() -> None:
         print(f"Input file not found: {input_path}")
         sys.exit(1)
 
-    with open(input_path, "r", encoding="utf-8") as f:
+    with open(input_path, encoding="utf-8") as f:
         data = json.load(f)
 
     total = len(data)

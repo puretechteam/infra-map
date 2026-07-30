@@ -9,7 +9,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 def test_data_loading():
     data_file = DATA_DIR / "data_centers.json"
     assert data_file.exists()
-    with open(data_file, "r", encoding="utf-8") as f:
+    with open(data_file, encoding="utf-8") as f:
         data = json.load(f)
     assert isinstance(data, list)
     assert len(data) > 0
@@ -18,7 +18,7 @@ def test_data_loading():
 def test_clean_data_loading():
     data_file = DATA_DIR / "data_centers_clean.json"
     assert data_file.exists()
-    with open(data_file, "r", encoding="utf-8") as f:
+    with open(data_file, encoding="utf-8") as f:
         data = json.load(f)
     assert isinstance(data, list)
     assert len(data) > 0
@@ -101,7 +101,7 @@ def test_checksum_verification():
     sha256_file = DATA_DIR / "data_centers.json.sha256"
 
     actual_checksum = compute_checksum(str(data_file))
-    with open(sha256_file, "r") as f:
+    with open(sha256_file) as f:
         expected_checksum = f.read().strip()
 
     assert actual_checksum.lower() == expected_checksum.lower()

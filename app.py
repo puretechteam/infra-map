@@ -118,6 +118,29 @@ def validate_data(data: list[dict]) -> str | None:
     return None
 
 
+def _normalize_data(data: list[dict]) -> list[dict]:
+    """Normalize data entries to the expected schema.
+
+    Converts OSM-style lat/lon to latitude/longitude and provides
+    defaults for missing fields.
+    """
+    for item in data:
+        if "latitude" not in item and "lat" in item:
+            item["latitude"] = item["lat"]
+        if "longitude" not in item and "lon" in item:
+            item["longitude"] = item["lon"]
+        if "latitude" not in item:
+            item["latitude"] = 0.0
+        if "longitude" not in item:
+            item["longitude"] = 0.0
+        for field in ("name", "provider", "region", "city", "country"):
+            if field not in item:
+                item[field] = ""
+        if "services" not in item:
+            item["services"] = []
+    return data
+
+
 def load_and_validate_data() -> tuple[list[dict] | None, str | None]:
     """Load and validate the data centers JSON file.
 
@@ -150,6 +173,8 @@ def load_and_validate_data() -> tuple[list[dict] | None, str | None]:
     except (OSError, json.JSONDecodeError) as e:
         logger.error("Failed to parse data file: %s", e)
         return None, f"Failed to parse data file: {e}"
+
+    data = _normalize_data(data)
 
     error = validate_data(data)
     if error:

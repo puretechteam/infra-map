@@ -57,6 +57,22 @@ make install-dev
 
    The output executable will be placed in the `dist/` directory with the version number embedded in the filename (e.g., `infra-map-0.1.0.exe`).
 
+## Testing
+
+Run the test suite with:
+
+```
+make test
+```
+
+Or directly with pytest:
+
+```
+pytest
+```
+
+Tests are located in the `tests/` directory and use the `pytest` framework. The `tests/conftest.py` file provides a `client` fixture that returns a Flask test client configured in testing mode.
+
 ## Data Sources
 
 - Bundled data: `data/data_centers.json` (141,736 entries total; see Data Processing below)

@@ -1,8 +1,7 @@
-import hashlib
 import json
 from pathlib import Path
 
-from app import compute_checksum, load_and_validate_data, validate_data
+from app import compute_checksum, validate_data
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 

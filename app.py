@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, jsonify, request, send_from_directory, Response
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
@@ -147,7 +147,7 @@ def load_and_validate_data() -> tuple[list[dict] | None, str | None]:
     try:
         with open(data_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.error("Failed to parse data file: %s", e)
         return None, f"Failed to parse data file: {e}"
 
@@ -248,7 +248,7 @@ def get_cached_or_fetch(url: str, cache_filename: str) -> tuple[list[dict] | Non
             fetched_at = cached.get("_fetched_at", 0)
             if now - fetched_at < CACHE_TTL_SECONDS:
                 return cached.get("_data"), None
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             pass
 
     try:
@@ -271,7 +271,7 @@ def get_cached_or_fetch(url: str, cache_filename: str) -> tuple[list[dict] | Non
                 with open(cache_path, "r", encoding="utf-8") as f:
                     cached = json.load(f)
                 return cached.get("_data"), "data may be stale"
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 pass
         return None, str(e)
 
@@ -423,7 +423,7 @@ def get_cached_fallback() -> list[dict] | None:
                 return None
             logger.info("Loaded %d entries from cached fallback data", len(data))
             return data
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.error("Failed to load cached fallback data: %s", e)
     return None
 

@@ -48,8 +48,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+CIRCUIT_BREAKER_THRESHOLD = 3
+CIRCUIT_BREAKER_COOLDOWN = 60
+
+_circuit_breaker_failures: dict[str, int] = {}
+_circuit_breaker_last_failure: dict[str, float] = {}
+
 _validated_data_cache: list[dict] | None = None
 _data_file_mtime: float | None = None
+_data_checksum_verified: bool = False
 
 
 def get_data_path() -> str:
@@ -141,50 +148,120 @@ def _normalize_data(data: list[dict]) -> list[dict]:
     return data
 
 
-def load_and_validate_data() -> tuple[list[dict] | None, str | None]:
+def verify_alpr_checksums() -> dict[str, bool]:
+    """Verify checksums for alpr batch JSON files.
+
+    For each alpr_batch*.json file in the data directory, if a
+    corresponding .sha256 file exists, the checksum is verified.
+
+    Returns:
+        A dict mapping filename to True if verified, False if
+        verification failed or no checksum file exists.
+    """
+    results: dict[str, bool] = {}
+    data_path = get_data_path()
+    for entry in sorted(os.listdir(data_path)):
+        if not entry.startswith("alpr_batch") or not entry.endswith(".json"):
+            continue
+        filepath = os.path.join(data_path, entry)
+        sha256_path = filepath + ".sha256"
+        if not os.path.exists(sha256_path):
+            results[entry] = False
+            continue
+        try:
+            actual = compute_checksum(filepath)
+            with open(sha256_path, encoding="utf-8") as f:
+                expected = f.read().strip()
+            results[entry] = actual.lower() == expected.lower()
+        except (OSError, IOError):
+            results[entry] = False
+    return results
+
+
+def _verify_data_checksum(data_path: str) -> tuple[bool, str | None]:
+    """Verify the SHA-256 checksum of a data file against its .sha256 file.
+
+    Args:
+        data_path: Path to the data file to verify.
+
+    Returns:
+        A tuple of (verified, error). verified is True if the checksum
+        matches or no .sha256 file exists. error is None on success or
+        a descriptive error string on failure.
+    """
+    sha256_path = data_path + ".sha256"
+    if not os.path.exists(sha256_path):
+        logger.warning("No checksum file found for %s, integrity cannot be verified", data_path)
+        return False, "No checksum file available"
+
+    try:
+        actual = compute_checksum(data_path)
+        with open(sha256_path, encoding="utf-8") as f:
+            expected = f.read().strip()
+    except (OSError, IOError) as e:
+        logger.error("Failed to read checksum file: %s", e)
+        return False, f"Failed to read checksum file: {e}"
+
+    if actual.lower() != expected.lower():
+        logger.error("Checksum mismatch for %s", data_path)
+        return False, "Checksum verification failed"
+
+    return True, None
+
+
+def load_and_validate_data() -> tuple[list[dict] | None, str | None, bool]:
     """Load and validate the data centers JSON file.
 
     Results are cached in memory and only reloaded when the file's
-    modification time changes.
+    modification time changes. Checksum verification is performed
+    against the .sha256 file when available.
 
     Returns:
-        A tuple of (data, error). data is the validated list of entries
-        on success, or None on failure. error is None on success, or
-        an error message string on failure.
+        A tuple of (data, error, checksum_verified). data is the
+        validated list of entries on success, or None on failure.
+        error is None on success, or an error message string on
+        failure. checksum_verified is True if the data integrity
+        was confirmed via checksum, False otherwise.
     """
     data_path = os.path.join(get_data_path(), "data_centers.json")
     if not os.path.exists(data_path):
-        return None, "Data file not found"
+        return None, "Data file not found", False
 
     try:
         current_mtime = os.path.getmtime(data_path)
     except OSError as e:
         logger.error("Failed to get mtime for data file: %s", e)
-        return None, f"Failed to access data file: {e}"
+        return None, f"Failed to access data file: {e}", False
 
-    global _validated_data_cache, _data_file_mtime
+    global _validated_data_cache, _data_file_mtime, _data_checksum_verified
     if _validated_data_cache is not None and _data_file_mtime == current_mtime:
         logger.debug("Returning cached validated data (mtime unchanged)")
-        return _validated_data_cache, None
+        return _validated_data_cache, None, _data_checksum_verified
 
     try:
         with open(data_path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         logger.error("Failed to parse data file: %s", e)
-        return None, f"Failed to parse data file: {e}"
+        return None, f"Failed to parse data file: {e}", False
 
     data = _normalize_data(data)
 
     error = validate_data(data)
     if error:
         logger.error("Data validation failed: %s", error)
-        return None, error
+        return None, error, False
+
+    checksum_verified, checksum_error = _verify_data_checksum(data_path)
+    if not checksum_verified and checksum_error:
+        logger.error("Checksum verification failed: %s", checksum_error)
+        return None, checksum_error, False
 
     _validated_data_cache = data
     _data_file_mtime = current_mtime
-    logger.info("Loaded and validated %d data center entries", len(data))
-    return data, None
+    _data_checksum_verified = checksum_verified
+    logger.info("Loaded and validated %d data center entries (checksum_verified=%s)", len(data), checksum_verified)
+    return data, None, checksum_verified
 
 
 def is_url_allowed(url: str) -> bool:
@@ -247,11 +324,44 @@ def check_rate_limit(ip: str) -> bool:
     return True
 
 
+def _is_circuit_open(url: str) -> bool:
+    """Check whether the circuit breaker is open for a given URL.
+
+    Args:
+        url: The URL to check.
+
+    Returns:
+        True if the circuit is open (should not attempt fetch), False otherwise.
+    """
+    failures = _circuit_breaker_failures.get(url, 0)
+    if failures < CIRCUIT_BREAKER_THRESHOLD:
+        return False
+    last_failure = _circuit_breaker_last_failure.get(url, 0.0)
+    if datetime.now(timezone.utc).timestamp() - last_failure < CIRCUIT_BREAKER_COOLDOWN:
+        return True
+    return False
+
+
+def _record_circuit_failure(url: str) -> None:
+    """Record a failure for a URL in the circuit breaker state."""
+    now = datetime.now(timezone.utc).timestamp()
+    _circuit_breaker_failures[url] = _circuit_breaker_failures.get(url, 0) + 1
+    _circuit_breaker_last_failure[url] = now
+
+
+def _reset_circuit(url: str) -> None:
+    """Reset the circuit breaker state for a URL after a successful fetch."""
+    _circuit_breaker_failures.pop(url, None)
+    _circuit_breaker_last_failure.pop(url, None)
+
+
 def get_cached_or_fetch(url: str, cache_filename: str) -> tuple[list[dict] | None, str | None]:
-    """Fetch a URL with file-based caching.
+    """Fetch a URL with file-based caching and circuit breaker protection.
 
     If a cached entry exists and is within CACHE_TTL_SECONDS, it is
     returned directly. Otherwise the URL is fetched and cached.
+    The circuit breaker prevents repeated fetches to URLs that have
+    failed consecutively.
 
     Args:
         url: The URL to fetch.
@@ -272,9 +382,33 @@ def get_cached_or_fetch(url: str, cache_filename: str) -> tuple[list[dict] | Non
                 cached = json.load(f)
             fetched_at = cached.get("_fetched_at", 0)
             if now - fetched_at < CACHE_TTL_SECONDS:
-                return cached.get("_data"), None
+                cached_data = cached.get("_data")
+                if cached_data is not None and isinstance(cached_data, list):
+                    validation_error = validate_data(cached_data)
+                    if validation_error:
+                        logger.warning("Cached data failed schema validation: %s", validation_error)
+                    else:
+                        return cached_data, None
+                return cached_data, None
         except (OSError, json.JSONDecodeError):
             pass
+
+    if _is_circuit_open(url):
+        logger.warning("Circuit breaker open for %s, skipping fetch", url)
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, encoding="utf-8") as f:
+                    cached = json.load(f)
+                cached_data = cached.get("_data")
+                if cached_data is not None and isinstance(cached_data, list):
+                    validation_error = validate_data(cached_data)
+                    if validation_error:
+                        logger.warning("Stale cached data failed schema validation: %s", validation_error)
+                        return None, "stale data failed validation"
+                return cached_data, "data may be stale"
+            except (OSError, json.JSONDecodeError):
+                pass
+        return None, "circuit breaker open and no valid cached data"
 
     try:
         import requests
@@ -283,19 +417,33 @@ def get_cached_or_fetch(url: str, cache_filename: str) -> tuple[list[dict] | Non
         result = resp.json()
 
         if not isinstance(result, list):
+            _record_circuit_failure(url)
             return None, "Invalid response structure from external source"
+
+        validation_error = validate_data(result)
+        if validation_error:
+            _record_circuit_failure(url)
+            return None, f"Schema validation failed: {validation_error}"
 
         cache_entry = {"_fetched_at": now, "_data": result}
         with open(cache_path, "w", encoding="utf-8") as f:
             json.dump(cache_entry, f)
 
+        _reset_circuit(url)
         return result, None
     except Exception as e:
+        _record_circuit_failure(url)
         if os.path.exists(cache_path):
             try:
                 with open(cache_path, encoding="utf-8") as f:
                     cached = json.load(f)
-                return cached.get("_data"), "data may be stale"
+                cached_data = cached.get("_data")
+                if cached_data is not None and isinstance(cached_data, list):
+                    validation_error = validate_data(cached_data)
+                    if validation_error:
+                        logger.warning("Stale cached data failed schema validation: %s", validation_error)
+                        return None, "stale data failed validation"
+                return cached_data, "data may be stale"
             except (OSError, json.JSONDecodeError):
                 pass
         return None, str(e)
@@ -326,14 +474,14 @@ def api_data() -> Response:
 
     On validation failure, falls back to cached data if available.
     """
-    data, error = load_and_validate_data()
+    data, error, checksum_verified = load_and_validate_data()
     if error:
         cached_data = get_cached_fallback()
         if cached_data is not None:
-            return jsonify({"data": cached_data, "stale": True, "error": error})
-        return jsonify({"data": [], "stale": False, "error": error}), 503
+            return jsonify({"data": cached_data, "stale": True, "error": error, "checksum_verified": checksum_verified})
+        return jsonify({"data": [], "stale": False, "error": error, "checksum_verified": checksum_verified}), 503
 
-    return jsonify({"data": data, "stale": False, "error": None})
+    return jsonify({"data": data, "stale": False, "error": None, "checksum_verified": checksum_verified})
 
 
 @app.route("/api/providers")
@@ -342,16 +490,16 @@ def api_providers() -> Response:
 
     On validation failure, falls back to cached data if available.
     """
-    data, error = load_and_validate_data()
+    data, error, checksum_verified = load_and_validate_data()
     if error:
         cached_data = get_cached_fallback()
         if cached_data is not None:
             providers = sorted(set(item["provider"] for item in cached_data))
-            return jsonify({"providers": providers, "stale": True, "error": error})
-        return jsonify({"providers": [], "stale": False, "error": error}), 503
+            return jsonify({"providers": providers, "stale": True, "error": error, "checksum_verified": checksum_verified})
+        return jsonify({"providers": [], "stale": False, "error": error, "checksum_verified": checksum_verified}), 503
 
     providers = sorted(set(item["provider"] for item in data))
-    return jsonify({"providers": providers, "stale": False, "error": None})
+    return jsonify({"providers": providers, "stale": False, "error": None, "checksum_verified": checksum_verified})
 
 
 @app.route("/api/regions")
@@ -360,16 +508,16 @@ def api_regions() -> Response:
 
     On validation failure, falls back to cached data if available.
     """
-    data, error = load_and_validate_data()
+    data, error, checksum_verified = load_and_validate_data()
     if error:
         cached_data = get_cached_fallback()
         if cached_data is not None:
             regions = sorted(set(item["region"] for item in cached_data))
-            return jsonify({"regions": regions, "stale": True, "error": error})
-        return jsonify({"regions": [], "stale": False, "error": error}), 503
+            return jsonify({"regions": regions, "stale": True, "error": error, "checksum_verified": checksum_verified})
+        return jsonify({"regions": [], "stale": False, "error": error, "checksum_verified": checksum_verified}), 503
 
     regions = sorted(set(item["region"] for item in data))
-    return jsonify({"regions": regions, "stale": False, "error": None})
+    return jsonify({"regions": regions, "stale": False, "error": None, "checksum_verified": checksum_verified})
 
 
 @app.route("/api/stats")
@@ -378,15 +526,15 @@ def api_stats() -> Response:
 
     On validation failure, falls back to cached data if available.
     """
-    data, error = load_and_validate_data()
+    data, error, checksum_verified = load_and_validate_data()
     if error:
         cached_data = get_cached_fallback()
         if cached_data is not None:
             data = cached_data
         else:
-            return jsonify({"total_centers": 0, "total_capacity_mw": 0, "providers_count": 0, "stale": False, "error": error})
+            return jsonify({"total_centers": 0, "total_capacity_mw": 0, "providers_count": 0, "stale": False, "error": error, "checksum_verified": checksum_verified})
 
-    total_centers = len(data)
+    total_centers = sum(1 for item in data if item.get("provider") != "Flock Security")
     total_capacity = sum(item.get("capacity_mw", 0) for item in data)
     providers = sorted(set(item["provider"] for item in data))
 
@@ -396,7 +544,18 @@ def api_stats() -> Response:
         "providers_count": len(providers),
         "stale": False,
         "error": None,
+        "checksum_verified": checksum_verified,
     })
+
+
+@app.route("/health")
+def health() -> Response:
+    """Health check endpoint for container orchestration and liveness probes.
+
+    Returns:
+        A JSON response indicating the service is healthy.
+    """
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/fetch-external")
@@ -432,9 +591,10 @@ def api_fetch_external() -> Response:
 def get_cached_fallback() -> list[dict] | None:
     """Load cached data from disk and validate it.
 
-    Returns the data only if it passes the same validation as
-    load_and_validate_data(). Returns None if the file is missing,
-    invalid JSON, or fails validation.
+    Performs schema validation and checksum verification when
+    available. Returns the data only if it passes validation.
+    Returns None if the file is missing, invalid JSON, or fails
+    validation.
     """
     ensure_cache_dir()
     data_path = os.path.join(get_data_path(), "data_centers.json")
@@ -446,7 +606,10 @@ def get_cached_fallback() -> list[dict] | None:
             if error:
                 logger.warning("Cached fallback data failed validation: %s", error)
                 return None
-            logger.info("Loaded %d entries from cached fallback data", len(data))
+            checksum_verified, checksum_error = _verify_data_checksum(data_path)
+            if not checksum_verified and checksum_error:
+                logger.warning("Cached fallback checksum verification failed: %s", checksum_error)
+            logger.info("Loaded %d entries from cached fallback data (checksum_verified=%s)", len(data), checksum_verified)
             return data
         except (OSError, json.JSONDecodeError) as e:
             logger.error("Failed to load cached fallback data: %s", e)

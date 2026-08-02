@@ -1,18 +1,58 @@
+# Python
 __pycache__/
-*.exe
-build/
-dist/
-cache/
-.cache/
-.env*
 *.pyc
-venv/
+*.pyo
+*.egg-info/
+dist/
+build/
 .venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
 Thumbs.db
-*.log
-*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# Build
+*.exe
+*.spec
+out/
+
+# Windows Build
+build.bat
+dependencies.bat
+
+# Cache
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# Data
+*.json.sha256
+
+# Secrets
+*.key
+*.pem
+credentials*
+secrets*
+
+# Node
+node_modules/
+
+# Project-specific
+.cache/
 config.json
 secrets.json
 *.key
 *.pem
+*.log

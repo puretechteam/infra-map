@@ -1,6 +1,7 @@
 var map;
 var markers = [];
 var allData = [];
+var filteredData = [];
 var providerColors = {};
 var colorIndex = 0;
 var colorPalette = [
@@ -12,10 +13,14 @@ var colorPalette = [
     '#560bad', '#480ca8', '#3f37c9'
 ];
 var markerLayer = null;
-var cameraConesLayer = null;
-var coneDebounceTimer = null;
+var clusterGroup = null;
 var updateRAF = null;
 var pendingData = null;
+var cameraConesLayer = null;
+var coneDebounceTimer = null;
+var coneUpdateRAF = null;
+var CONE_DEBOUNCE_MS = 400;
+var conesEnabled = true;
 
 function getProviderColor(provider) {
     if (!providerColors[provider]) {
@@ -49,13 +54,13 @@ function fetchData() {
         .then(function(result) {
             if (result && result.data !== undefined) {
                 allData = result.data;
+                filteredData = allData;
                 if (result.stale) {
                     showStaleIndicator();
                 } else {
                     hideStaleIndicator();
                 }
                 addMarkers(allData);
-                populateLegend();
                 updateSidebarStats(allData);
             } else {
                 loadBundledData();
@@ -77,14 +82,15 @@ function loadBundledData() {
         })
         .then(function(data) {
             allData = data;
+            filteredData = allData;
             showStaleIndicator();
             addMarkers(allData);
-            populateLegend();
             updateSidebarStats(allData);
         })
         .catch(function(error) {
             console.error('Error loading bundled data:', error);
             allData = [];
+            filteredData = [];
             addMarkers([]);
             updateSidebarStats([]);
         });
@@ -116,67 +122,78 @@ function removeCameraCones() {
         cameraConesLayer.clearLayers();
         cameraConesLayer = null;
     }
+    if (coneUpdateRAF) {
+        cancelAnimationFrame(coneUpdateRAF);
+        coneUpdateRAF = null;
+    }
 }
 
 function debounceAddCameraCones() {
     if (coneDebounceTimer) {
         clearTimeout(coneDebounceTimer);
     }
+    if (coneUpdateRAF) {
+        cancelAnimationFrame(coneUpdateRAF);
+    }
     coneDebounceTimer = setTimeout(function() {
         addCameraCones();
-    }, 150);
+    }, CONE_DEBOUNCE_MS);
 }
 
 function addCameraCones() {
     if (!map) return;
-    if (map.getZoom() < 12) {
+    if (!conesEnabled) return;
+    if (currentFilters.mode !== 'flockcameras') return;
+    if (map.getZoom() < 6) {
         removeCameraCones();
         return;
     }
 
-    cameraConesLayer = L.layerGroup();
+    requestAnimationFrame(function() {
+        cameraConesLayer = L.layerGroup();
+        var bounds = map.getBounds();
 
-    var filtered = getFilteredData(allData, currentFilters.mode);
+        for (var i = 0; i < filteredData.length; i++) {
+            var dc = filteredData[i];
+            if (!isFlockCamera(dc)) continue;
+            if (dc.bearing === undefined) continue;
 
-    for (var i = 0; i < filtered.length; i++) {
-        var dc = filtered[i];
-        if (!isFlockCamera(dc)) continue;
-        if (dc.bearing === undefined) continue;
+            var lat = dc.latitude;
+            var lng = dc.longitude;
 
-        var fov = dc.field_of_view || 90;
-        var bearingRad = (dc.bearing * Math.PI) / 180;
-        var leftBearingRad = ((dc.bearing - fov / 2) * Math.PI) / 180;
-        var rightBearingRad = ((dc.bearing + fov / 2) * Math.PI) / 180;
-        var lat = dc.latitude;
-        var lng = dc.longitude;
+            if (!bounds.contains([lat, lng])) continue;
 
-        var tipOffset = 0.003;
+            var coneColor = getProviderColor(dc.provider);
+            var fov = dc.field_of_view || 60;
+            var bearingRad = (dc.bearing * Math.PI) / 180;
+            var leftBearingRad = ((dc.bearing - fov / 2) * Math.PI) / 180;
+            var rightBearingRad = ((dc.bearing + fov / 2) * Math.PI) / 180;
+            var tipOffset = Math.max(0.001, 0.003 * (18 - map.getZoom()) / 15);
 
-        var tipLat = lat + tipOffset * Math.cos(bearingRad);
-        var tipLng = lng + tipOffset * Math.sin(bearingRad) / Math.cos(lat * Math.PI / 180);
+            var base1Lat = lat + tipOffset * 2 * Math.cos(leftBearingRad);
+            var base1Lng = lng + tipOffset * 2 * Math.sin(leftBearingRad) / Math.cos(lat * Math.PI / 180);
 
-        var base1Lat = lat + tipOffset * 2 * Math.cos(leftBearingRad);
-        var base1Lng = lng + tipOffset * 2 * Math.sin(leftBearingRad) / Math.cos(lat * Math.PI / 180);
+            var base2Lat = lat + tipOffset * 2 * Math.cos(rightBearingRad);
+            var base2Lng = lng + tipOffset * 2 * Math.sin(rightBearingRad) / Math.cos(lat * Math.PI / 180);
 
-        var base2Lat = lat + tipOffset * 2 * Math.cos(rightBearingRad);
-        var base2Lng = lng + tipOffset * 2 * Math.sin(rightBearingRad) / Math.cos(lat * Math.PI / 180);
+            var cone = L.polygon([
+                [lat, lng],
+                [base1Lat, base1Lng],
+                [base2Lat, base2Lng]
+            ], {
+                fillColor: coneColor,
+                fillOpacity: 0.25,
+                color: coneColor,
+                weight: 1,
+                opacity: 0.5
+            });
 
-        var cone = L.polygon([
-            [tipLat, tipLng],
-            [base1Lat, base1Lng],
-            [base2Lat, base2Lng]
-        ], {
-            fillColor: '#f77f00',
-            fillOpacity: 0.5,
-            color: '#f77f00',
-            weight: 1,
-            opacity: 0.7
-        });
+            cameraConesLayer.addLayer(cone);
+        }
 
-        cameraConesLayer.addLayer(cone);
-    }
-
-    map.addLayer(cameraConesLayer);
+        map.addLayer(cameraConesLayer);
+        coneUpdateRAF = null;
+    });
 }
 
 function getFilteredData(data, mode) {
@@ -199,70 +216,80 @@ function addMarkers(data) {
 }
 
 function _addMarkersInternal(data) {
-    if (markerLayer) {
-        map.removeLayer(markerLayer);
-        markerLayer.clearLayers();
-    }
+     if (markerLayer) {
+         map.removeLayer(markerLayer);
+         markerLayer.clearLayers();
+     }
+     if (clusterGroup) {
+         map.removeLayer(clusterGroup);
+         clusterGroup.clearLayers();
+     }
 
-    markerLayer = L.layerGroup();
+     markerLayer = L.layerGroup();
+     clusterGroup = L.markerClusterGroup({
+         maxClusterRadius: 40,
+         spiderfyOnMaxZoom: true,
+         showCoverageOnHover: false,
+         zoomToBoundsOnClick: true,
+         disableClusteringAtZoom: 8
+     });
 
-    var filtered = getFilteredData(data, currentFilters.mode);
-    var zoom = map.getZoom();
-    var bounds = map.getBounds();
-    var gridCells = new Set();
+     var filtered = getFilteredData(data, currentFilters.mode);
+     var bounds = map.getBounds();
 
-    for (var j = 0; j < filtered.length; j++) {
-        var dc = filtered[j];
-        var lat = dc.latitude;
-        var lng = dc.longitude;
+     for (var j = 0; j < filtered.length; j++) {
+         var dc = filtered[j];
+         var lat = dc.latitude;
+         var lng = dc.longitude;
 
-        if (!bounds.contains([lat, lng])) continue;
+         if (!bounds.contains([lat, lng])) continue;
 
-        if (zoom < 5) {
-            var cellKey = Math.floor(lat / 2) + ',' + Math.floor(lng / 2);
-            if (gridCells.has(cellKey)) continue;
-            gridCells.add(cellKey);
-        }
+         var color = getProviderColor(dc.provider);
+         var isCamera = isFlockCamera(dc);
+         var radius = isCamera ? 4 : 3;
+         var borderColor = isCamera ? 'rgba(255, 200, 0, 0.6)' : 'rgba(255, 255, 255, 0.3)';
+         var borderWidth = isCamera ? 1 : 1;
 
-        var color = getProviderColor(dc.provider);
-        var isCamera = isFlockCamera(dc);
-        var radius = isCamera ? 7 : 6;
-        var borderColor = isCamera ? 'rgba(255, 200, 0, 0.6)' : 'rgba(255, 255, 255, 0.3)';
-        var borderWidth = isCamera ? 3 : 2;
+         var marker = L.circleMarker([lat, lng], {
+             radius: radius,
+             fillColor: color,
+             fillOpacity: 1,
+             color: borderColor,
+             weight: borderWidth,
+             opacity: 1
+         });
 
-        var marker = L.circleMarker([lat, lng], {
-            radius: radius,
-            fillColor: color,
-            fillOpacity: 1,
-            color: borderColor,
-            weight: borderWidth,
-            opacity: 1
-        });
+         var popupContent = '<strong>' + dc.name + '</strong><br>';
+         popupContent += dc.provider + ' &middot; ' + dc.city + ', ' + dc.country + '<br>';
+         popupContent += dc.region;
+         if (isCamera) {
+             popupContent += ' &middot; ' + (dc.camera_model || 'N/A') + ' &middot; ' + (dc.resolution || 'N/A');
+             popupContent += '<br>Bearing: ' + (dc.bearing !== undefined ? dc.bearing + '&deg;' : 'N/A');
+             popupContent += ' &middot; FOV: ' + (dc.field_of_view || 'N/A') + '&deg;';
+         } else {
+             popupContent += ' &middot; ' + (dc.capacity_mw || 0) + ' MW';
+         }
+         marker.bindPopup(popupContent);
 
-        var popupContent = '<strong>' + dc.name + '</strong><br>';
-        popupContent += dc.provider + ' &middot; ' + dc.city + ', ' + dc.country + '<br>';
-        popupContent += dc.region;
-        if (isCamera) {
-            popupContent += ' &middot; ' + (dc.camera_model || 'N/A') + ' &middot; ' + (dc.resolution || 'N/A');
-            popupContent += '<br>Bearing: ' + (dc.bearing !== undefined ? dc.bearing + '&deg;' : 'N/A');
-            popupContent += ' &middot; FOV: ' + (dc.field_of_view || 'N/A') + '&deg;';
-        } else {
-            popupContent += ' &middot; ' + (dc.capacity_mw || 0) + ' MW';
-        }
-        marker.bindPopup(popupContent);
+         marker.on('click', (function(dcData) {
+             return function() {
+                 showDetailPanel(dcData);
+             };
+         })(dc));
 
-        marker.on('click', (function(dcData) {
-            return function() {
-                showDetailPanel(dcData);
-            };
-        })(dc));
+         if (isCamera) {
+             clusterGroup.addLayer(marker);
+         } else {
+             markerLayer.addLayer(marker);
+         }
+     }
 
-        markerLayer.addLayer(marker);
-    }
-
-    map.addLayer(markerLayer);
-    debounceAddCameraCones();
-}
+     map.addLayer(markerLayer);
+     map.addLayer(clusterGroup);
+     debounceAddCameraCones();
+     populateLegend();
+     updateSidebarStats(data);
+ }
 
 function showDetailPanel(dc) {
     var panel = document.getElementById('detail-panel');
@@ -325,25 +352,31 @@ function updateSidebarStats(data) {
     var camerasEl = document.getElementById('stat-cameras');
     var providersEl = document.getElementById('stat-providers');
 
-    if (totalEl) totalEl.textContent = data.length.toLocaleString();
+    if (totalEl) {
+        var dataCenterCount = 0;
+        for (var i = 0; i < data.length; i++) {
+            if (!isFlockCamera(data[i])) dataCenterCount++;
+        }
+        totalEl.textContent = dataCenterCount.toLocaleString();
+    }
     if (capacityEl) {
         var total = 0;
-        for (var i = 0; i < data.length; i++) {
-            total += (data[i].capacity_mw || 0);
+        for (var j = 0; j < data.length; j++) {
+            total += (data[j].capacity_mw || 0);
         }
         capacityEl.textContent = total.toLocaleString() + ' MW';
     }
     if (camerasEl) {
         var cameraCount = 0;
-        for (var j = 0; j < data.length; j++) {
-            if (isFlockCamera(data[j])) cameraCount++;
+        for (var k = 0; k < data.length; k++) {
+            if (isFlockCamera(data[k])) cameraCount++;
         }
         camerasEl.textContent = cameraCount.toLocaleString();
     }
     if (providersEl) {
         var providers = {};
-        for (var k = 0; k < data.length; k++) {
-            providers[data[k].provider] = true;
+        for (var m = 0; m < data.length; m++) {
+            providers[data[m].provider] = true;
         }
         providersEl.textContent = Object.keys(providers).length.toLocaleString();
     }
@@ -367,6 +400,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (resetBtn) {
         resetBtn.addEventListener('click', function() {
             map.setView([20, 0], 3);
+        });
+    }
+
+    var coneToggleCheckbox = document.getElementById('cone-toggle-checkbox');
+    if (coneToggleCheckbox) {
+        coneToggleCheckbox.addEventListener('change', function() {
+            conesEnabled = coneToggleCheckbox.checked;
+            if (conesEnabled && currentFilters.mode === 'flockcameras') {
+                debounceAddCameraCones();
+            } else {
+                removeCameraCones();
+            }
         });
     }
 });

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Infra Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
@@ -16,7 +18,7 @@
         <div id="sidebar-stats">
             <h3>Statistics</h3>
             <div class="stat-item">
-                <span class="stat-label">Total Centers</span>
+                <span class="stat-label">Data Centers</span>
                 <span class="stat-value" id="stat-total">0</span>
             </div>
             <div class="stat-item">
@@ -52,6 +54,11 @@
                 <button class="mode-btn active" data-mode="datacenters">Data Centers</button>
                 <button class="mode-btn" data-mode="flockcameras">Flock Cameras</button>
             </div>
+            <div id="cone-toggle">
+                <label class="cone-toggle-label">
+                    <input type="checkbox" id="cone-toggle-checkbox" checked /> Cones
+                </label>
+            </div>
             <div id="filters">
                 <select id="provider-filter">
                     <option value="">All Providers</option>
@@ -73,6 +80,7 @@
         <div id="detail-body"></div>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="/static/js/map.js"></script>
     <script src="/static/js/filters.js"></script>
 </body>

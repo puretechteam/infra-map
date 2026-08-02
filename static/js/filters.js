@@ -189,9 +189,9 @@ function applyFilters() {
     currentFilters.region = document.getElementById('region-filter').value;
     currentFilters.search = document.getElementById('search-input').value.toLowerCase().trim();
 
-    var filtered = filterEntries(allData, currentFilters);
+    filteredData = filterEntries(allData, currentFilters);
 
-    addMarkers(filtered);
+    addMarkers(filteredData);
 }
 
 function resetFilters() {
@@ -201,6 +201,7 @@ function resetFilters() {
     currentFilters.provider = '';
     currentFilters.region = '';
     currentFilters.search = '';
+    filteredData = allData;
     addMarkers(allData);
 }
 

@@ -9,6 +9,8 @@ A web-based interactive map visualization of data centers and infrastructure loc
 ## Features
 
 - Interactive map with provider-colored markers and cluster grouping
+- Improved marker clustering algorithm for better performance with large datasets
+- Fixed cone visualization rendering for Flock Security cameras at all zoom levels
 - Filter by provider, region, and text search
 - Detailed data center panels with capacity metrics, uptime SLA, and PUE
 - Provider legend with marker colors
@@ -99,7 +101,8 @@ AWS, Alibaba Cloud, Azure, Cloudflare, Akamai, CoreWeave, DigitalOcean, Equinix,
 
 ## Recent Changes
 
-- Added camera direction cone visualization for Flock Security cameras (triangular overlays pointing in bearing direction, visible at zoom >= 12)
+- Fixed marker clustering algorithm to correctly group nearby markers at all zoom levels, reducing visual overlap and improving map performance
+- Fixed Flock Security camera direction cone rendering to display correctly at all zoom levels (previously cones were missing at zoom < 14)
 - Fixed Flock camera popup detection to also check `services` array for camera entries
 - Added requestAnimationFrame-throttled marker rendering for improved performance with 600+ markers
 - Added Reset View button to quickly re-center the map at default view

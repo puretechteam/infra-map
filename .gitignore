@@ -40,6 +40,15 @@ dependencies.bat
 # Data
 *.json.sha256
 
+# Large Data Files (raw/generated data — can be re-downloaded or regenerated)
+data/data_centers.json
+data/data_centers_clean.json
+data/alpr_batch*.json
+static/data/data_centers.json
+
+# Build Utilities
+static/js/map.py
+
 # Secrets
 *.key
 *.pem

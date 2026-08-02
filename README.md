@@ -1,4 +1,4 @@
-# Infra Map
+﻿# Infra Map
 
 [![CI](https://github.com/puretechteam/infra-map/actions/workflows/ci.yml/badge.svg)](https://github.com/puretechteam/infra-map/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -9,16 +9,18 @@ A web-based interactive map visualization of data centers and infrastructure loc
 ## Features
 
 - Interactive map with provider-colored markers and cluster grouping
+- Viewport filtering for data centers (renders correctly when panning the map)
 - Improved marker clustering algorithm for better performance with large datasets
-- Fixed cone visualization rendering for Flock Security cameras at all zoom levels
+- Flock Security camera direction cone visualization at correct size (removed /15 divisor that made cones 15x too small)
 - Filter by provider, region, and text search
 - Detailed data center panels with capacity metrics, uptime SLA, and PUE
 - Provider legend with marker colors
 - Sidebar with summary statistics
 - Self-sustaining data pipeline with caching and stale-data indicators
+- Data file checksum verification for integrity
+- CSS overflow/positioning fixes (no duplicate map rendering, no horizontal scrolling)
 - Dark theme with consistent CSS custom properties
 - Responsive design for mobile and desktop
-- Flock Security camera direction cone visualization (visible at zoom >= 12)
 - Camera-specific popups showing model, resolution, FOV, and bearing
 - Reset View button for quick map re-centering
 - Optimized marker rendering with requestAnimationFrame throttling
@@ -77,7 +79,13 @@ Tests are located in the `tests/` directory and use the `pytest` framework. The 
 
 ## Data Sources
 
-- Bundled data: `data/data_centers.json` (141,736 entries total; see Data Processing below)
+> **Note:** The large data files in `data/` (`data_centers.json`, `data_centers_clean.json`, `alpr_batch*.json`) are gitignored to keep the repository size manageable. Before preprocessing, the raw `data_centers.json` must be obtained from the project data source. Then run:
+>
+> > python scripts/preprocess_data.py
+> >
+> This generates `data_centers_clean.json` from the raw data.
+
+- Bundled data: `data/data_centers.json` (98,038 entries total: 290 data centers, 97,748 flock cameras; see Data Processing below)
 - External data: Fetched at runtime via `/api/fetch-external` proxy endpoint
 - Cached data: Stored in `cache/` directory with 1-hour TTL
 
@@ -93,7 +101,7 @@ python scripts/preprocess_data.py
 
 This reads `data/data_centers.json`, removes entries missing required fields (`name`, `provider`, `latitude`, `longitude`), and writes the cleaned data to `data/data_centers_clean.json`. A summary of removed and remaining entries is printed to the console.
 
-The preprocessing step is necessary because approximately 31% of the raw dataset consists of OSM ALPR camera nodes with a different schema (`type: "node"`, `id`, `lat`, `lon`, `tags`) that lack the data center fields required by the application.
+The preprocessing step is necessary because approximately 0.2% of the raw dataset consists of OSM ALPR camera nodes with a different schema (`type: "node"`, `id`, `lat`, `lon`, `tags`) that lack the data center fields required by the application.
 
 ### Providers Included
 
@@ -101,13 +109,13 @@ AWS, Alibaba Cloud, Azure, Cloudflare, Akamai, CoreWeave, DigitalOcean, Equinix,
 
 ## Recent Changes
 
-- Fixed marker clustering algorithm to correctly group nearby markers at all zoom levels, reducing visual overlap and improving map performance
-- Fixed Flock Security camera direction cone rendering to display correctly at all zoom levels (previously cones were missing at zoom < 14)
-- Fixed Flock camera popup detection to also check `services` array for camera entries
-- Added requestAnimationFrame-throttled marker rendering for improved performance with 600+ markers
-- Added Reset View button to quickly re-center the map at default view
-- Reduced header padding, filter dropdown font sizes, search input width, and mode toggle button sizes for a more compact UI
-- Expanded Flock camera dataset from 607 to 660 entries with realistic global locations
+- Fixed viewport filtering bug: data centers now render correctly when panning the map
+- Fixed flock camera clustering: always uses leaflet.markercluster, removed conditional threshold
+- Fixed CSS overflow/positioning issues causing duplicate map rendering and horizontal scrolling
+- Fixed cone rendering size (removed /15 divisor that made cones 15x too small)
+- Fixed checksum verification for data_centers.json
+- Updated .gitignore with proper entries for data files
+- Performance improvements: increased disableClusteringAtZoom to 14, increased maxClusterRadius to 80, removed moveend handler that was rebuilding all markers on every pan
 
 ## Roadmap
 
@@ -122,8 +130,8 @@ AWS, Alibaba Cloud, Azure, Cloudflare, Akamai, CoreWeave, DigitalOcean, Equinix,
 ```
 infra-map/
 ├── app.py                  # Flask backend
-├── build.bat               # PyInstaller build script
-├── dependencies.bat        # Dependency installer
+├── build.bat               # PyInstaller build script (gitignored)
+├── dependencies.bat        # Dependency installer (gitignored)
 ├── requirements.txt        # Runtime dependencies
 ├── VERSION                 # Version number
 ├── .env.example            # Environment variable template
@@ -132,8 +140,11 @@ infra-map/
 ├── scripts/
 │   └── preprocess_data.py  # Data preprocessing script
 ├── data/
-│   ├── data_centers.json        # Raw bundled data (mixed schema)
-│   └── data_centers_clean.json  # Cleaned data center data
+│   ├── data_centers.json        # Raw bundled data (gitignored)
+│   ├── data_centers_clean.json  # Cleaned data center data (gitignored)
+│   ├── data_centers.json.sha256 # Checksum file (gitignored)
+│   ├── alpr_batch*.json         # ALPR raw data files (gitignored)
+│   └── alpr_batch*.json.sha256  # ALPR checksum files (gitignored)
 ├── cache/                  # Runtime data cache
 ├── static/
 │   ├── index.html          # Main HTML page
@@ -141,9 +152,11 @@ infra-map/
 │   │   └── style.css       # Stylesheet
 │   ├── js/
 │   │   ├── map.js          # Map and marker logic
+│   │   ├── map.py          # Build utility script (gitignored)
 │   │   └── filters.js      # Filter and UI logic
 │   └── data/
-│       └── data_centers.json  # Bundled fallback data
+│       ├── data_centers.json      # Bundled fallback data (gitignored)
+│       └── data_centers.json.sha256  # Checksum file (gitignored)
 ```
 
 ## Configuration

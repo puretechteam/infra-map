@@ -168,7 +168,7 @@ function addCameraCones() {
             var bearingRad = (dc.bearing * Math.PI) / 180;
             var leftBearingRad = ((dc.bearing - fov / 2) * Math.PI) / 180;
             var rightBearingRad = ((dc.bearing + fov / 2) * Math.PI) / 180;
-            var tipOffset = Math.max(0.001, 0.003 * (18 - map.getZoom()) / 15);
+            var tipOffset = Math.max(0.001, 0.003 * (18 - map.getZoom()));
 
             var base1Lat = lat + tipOffset * 2 * Math.cos(leftBearingRad);
             var base1Lng = lng + tipOffset * 2 * Math.sin(leftBearingRad) / Math.cos(lat * Math.PI / 180);
@@ -216,39 +216,36 @@ function addMarkers(data) {
 }
 
 function _addMarkersInternal(data) {
-     if (markerLayer) {
-         map.removeLayer(markerLayer);
-         markerLayer.clearLayers();
-     }
-     if (clusterGroup) {
-         map.removeLayer(clusterGroup);
-         clusterGroup.clearLayers();
-     }
+      if (markerLayer) {
+          map.removeLayer(markerLayer);
+          markerLayer.clearLayers();
+      }
+      if (clusterGroup) {
+          map.removeLayer(clusterGroup);
+          clusterGroup.clearLayers();
+      }
 
-     markerLayer = L.layerGroup();
-     clusterGroup = L.markerClusterGroup({
-         maxClusterRadius: 40,
-         spiderfyOnMaxZoom: true,
-         showCoverageOnHover: false,
-         zoomToBoundsOnClick: true,
-         disableClusteringAtZoom: 8
-     });
+      markerLayer = L.layerGroup();
 
-     var filtered = getFilteredData(data, currentFilters.mode);
-     var bounds = map.getBounds();
+      var filtered = getFilteredData(data, currentFilters.mode);
+      clusterGroup = L.markerClusterGroup({
+          maxClusterRadius: 80,
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          zoomToBoundsOnClick: true,
+          disableClusteringAtZoom: 14
+      });
 
-     for (var j = 0; j < filtered.length; j++) {
+      for (var j = 0; j < filtered.length; j++) {
          var dc = filtered[j];
          var lat = dc.latitude;
          var lng = dc.longitude;
 
-         if (!bounds.contains([lat, lng])) continue;
-
-         var color = getProviderColor(dc.provider);
-         var isCamera = isFlockCamera(dc);
-         var radius = isCamera ? 4 : 3;
-         var borderColor = isCamera ? 'rgba(255, 200, 0, 0.6)' : 'rgba(255, 255, 255, 0.3)';
-         var borderWidth = isCamera ? 1 : 1;
+          var color = getProviderColor(dc.provider);
+          var isCamera = isFlockCamera(dc);
+          var radius = isCamera ? 6 : 3;
+          var borderColor = isCamera ? 'rgba(255, 200, 0, 1.0)' : 'rgba(255, 255, 255, 0.3)';
+          var borderWidth = isCamera ? 2 : 1;
 
          var marker = L.circleMarker([lat, lng], {
              radius: radius,
@@ -277,18 +274,18 @@ function _addMarkersInternal(data) {
              };
          })(dc));
 
-         if (isCamera) {
-             clusterGroup.addLayer(marker);
-         } else {
-             markerLayer.addLayer(marker);
-         }
-     }
+          if (isCamera) {
+              clusterGroup.addLayer(marker);
+          } else {
+              markerLayer.addLayer(marker);
+          }
+      }
 
-     map.addLayer(markerLayer);
-     map.addLayer(clusterGroup);
-     debounceAddCameraCones();
-     populateLegend();
-     updateSidebarStats(data);
+      map.addLayer(markerLayer);
+      map.addLayer(clusterGroup);
+      debounceAddCameraCones();
+      populateLegend();
+      updateSidebarStats(data);
  }
 
 function showDetailPanel(dc) {
@@ -395,6 +392,8 @@ document.addEventListener('DOMContentLoaded', function() {
     map.on('zoomend', function() {
         debounceAddCameraCones();
     });
+
+
 
     var resetBtn = document.getElementById('reset-view-btn');
     if (resetBtn) {
